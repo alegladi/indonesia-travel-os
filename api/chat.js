@@ -14,7 +14,6 @@ CONTESTO VIAGGIO
 COME DEVI RISPONDERE
 - Rispondi in italiano, diretto, pratico e compatto.
 - Non fare il turista da checklist: ragiona per Alessandro e Selena.
-- Se la domanda riguarda meteo, trasporti, traghetti, aperture, vulcani, incendi, sicurezza, eventi, prezzi, orari o informazioni che possono cambiare, usa la ricerca web prima di rispondere.
 - Distingui sempre dati verificati da ipotesi. Non inventare orari o disponibilita.
 - Per spostamenti, specifica sempre isola/zona, mezzo, tempo stimato, costo indicativo per due quando possibile e piano B.
 - Per attivita, indica affollamento, autenticita, valore per loro e se vale davvero la deviazione.
@@ -37,6 +36,10 @@ function getOutputText(data) {
   return parts.join('\n').trim();
 }
 
+function needsLiveWeb(message = '') {
+  return /(meteo|piogg|vento|traghett|ferry|treno|bus|autobus|volo|aeroport|terminal|gate|orari|orario|prezz|costo|apert|chius|incend|vulcan|bromo|ijen|allert|sicurezza|evento|festa|oggi|domani|adesso|ora|disponibil|prenot|ristorant|hotel|diving center)/i.test(message);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!process.env.OPENAI_API_KEY) {
@@ -48,34 +51,49 @@ export default async function handler(req, res) {
     if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Messaggio mancante.' });
 
     const body = {
-      model: 'gpt-5',
+      model: 'gpt-5-mini',
       instructions: TRAVEL_CONTEXT,
       input: pageContext ? `CONTESTO APP ATTUALE:\n${pageContext}\n\nDOMANDA:\n${message}` : message,
-      tools: [{ type: 'web_search' }],
       store: true,
-      reasoning: { effort: 'medium' }
+      reasoning: { effort: 'low' },
+      max_output_tokens: 1200
     };
+
+    // La ricerca web aumenta molto la latenza: usala solo quando la domanda dipende da dati live.
+    if (needsLiveWeb(message)) body.tools = [{ type: 'web_search' }];
     if (previousResponseId) body.previous_response_id = previousResponseId;
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify(body)
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000);
+
+    let response;
+    try {
+      response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const data = await response.json();
     if (!response.ok) {
-      console.error('OpenAI API error', data);
+      console.error('OpenAI API error', response.status, data);
       return res.status(response.status).json({ error: data?.error?.message || 'Errore OpenAI API.' });
     }
 
-    const text = getOutputText(data) || 'Non sono riuscito a generare una risposta.';
+    const text = getOutputText(data) || data.output_text || 'Non sono riuscito a generare una risposta.';
     return res.status(200).json({ text, responseId: data.id });
   } catch (error) {
-    console.error(error);
+    console.error('Travel OS chat error', error);
+    if (error?.name === 'AbortError') {
+      return res.status(504).json({ error: 'La risposta AI ha impiegato troppo tempo. Riprova.' });
+    }
     return res.status(500).json({ error: 'Errore del Travel OS.' });
   }
 }
