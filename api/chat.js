@@ -26,40 +26,19 @@ Campi ammessi dentro fields: hotel, stay, activity, transport, cost, dates, advi
 Se e una spesa totale aggiornata puoi anche usare "spent": numero in euro.
 NON aggiungere [[TRIP_UPDATE]] per domande, ipotesi o proposte non confermate.
 `;
-
-function getOutputText(data) {
-  if (!data || !Array.isArray(data.output)) return '';
-  const parts = [];
-  for (const item of data.output) {
-    if (!item || !Array.isArray(item.content)) continue;
-    for (const c of item.content) if (c?.type === 'output_text' && c.text) parts.push(c.text);
-  }
-  return parts.join('\n').trim();
-}
-function needsLiveWeb(message='') { return /(meteo|piogg|vento|traghett|ferry|treno|bus|volo|terminal|gate|orari|prezz|costo|apert|chius|incend|vulcan|bromo|ijen|allert|sicurezza|evento|festa|concert|live|oggi|domani|adesso|disponibil|prenot|ristorant|hotel|diving center)/i.test(message); }
-
+function getOutputText(data){if(!data||!Array.isArray(data.output))return'';const parts=[];for(const item of data.output){if(!item||!Array.isArray(item.content))continue;for(const c of item.content)if(c?.type==='output_text'&&c.text)parts.push(c.text)}return parts.join('\n').trim()}
+function needsLiveWeb(message=''){return /(meteo|piogg|vento|traghett|ferry|treno|bus|volo|terminal|gate|orari|prezz|costo|apert|chius|incend|vulcan|bromo|ijen|allert|sicurezza|evento|festa|concert|live|oggi|domani|adesso|disponibil|prenot|ristorant|hotel|diving center)/i.test(message)}
 export default async function handler(req,res){
-  if(req.method!=='POST') return res.status(405).json({error:'Method not allowed'});
-  if(!process.env.OPENAI_API_KEY) return res.status(503).json({error:'OPENAI_API_KEY non configurata su Vercel.'});
-  try{
-    const {message,previousResponseId,pageContext,attachment}=req.body||{};
-    if((!message||typeof message!=='string')&&!attachment) return res.status(400).json({error:'Messaggio mancante.'});
-    const text = pageContext ? `CONTESTO APP ATTUALE:\n${pageContext}\n\nDOMANDA/MODIFICA:\n${message||'Analizza allegato'}` : (message||'Analizza allegato');
-    let input;
-    if(attachment?.dataUrl){
-      const content=[{type:'input_text',text}];
-      if((attachment.type||'').startsWith('image/')) content.push({type:'input_image',image_url:attachment.dataUrl,detail:'auto'});
-      else if(attachment.type==='application/pdf'||/\.pdf$/i.test(attachment.name||'')) content.push({type:'input_file',filename:attachment.name||'documento.pdf',file_data:attachment.dataUrl});
-      else content.push({type:'input_text',text:`Allegato ricevuto: ${attachment.name||'file'} (tipo non analizzabile direttamente).`});
-      input=[{role:'user',content}];
-    } else input=text;
-    const body={model:'gpt-5-mini',instructions:TRAVEL_CONTEXT,input,store:true,reasoning:{effort:'low'},max_output_tokens:1400};
-    if(needsLiveWeb(message||'')) body.tools=[{type:'web_search'}];
-    if(previousResponseId) body.previous_response_id=previousResponseId;
-    const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),55000);
-    let response; try{response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${process.env.OPENAI_API_KEY}`},body:JSON.stringify(body),signal:controller.signal});}finally{clearTimeout(timeout)}
-    const data=await response.json();
-    if(!response.ok){console.error('OpenAI API error',response.status,data);return res.status(response.status).json({error:data?.error?.message||'Errore OpenAI API.'});}
-    return res.status(200).json({text:getOutputText(data)||data.output_text||'Non sono riuscito a generare una risposta.',responseId:data.id});
-  }catch(error){console.error('Travel OS chat error',error);if(error?.name==='AbortError') return res.status(504).json({error:'La risposta AI ha impiegato troppo tempo. Riprova.'});return res.status(500).json({error:'Errore del Travel OS.'});}
+ if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
+ if(!process.env.OPENAI_API_KEY)return res.status(503).json({error:'OPENAI_API_KEY non configurata su Vercel.'});
+ try{
+  const {message,previousResponseId,pageContext,attachment}=req.body||{};
+  if((!message||typeof message!=='string')&&!attachment)return res.status(400).json({error:'Messaggio mancante.'});
+  const text=pageContext?`CONTESTO APP ATTUALE:\n${pageContext}\n\nDOMANDA/MODIFICA:\n${message||'Analizza allegato'}`:(message||'Analizza allegato');
+  let input;
+  if(attachment?.dataUrl){const content=[{type:'input_text',text}];if((attachment.type||'').startsWith('image/'))content.push({type:'input_image',image_url:attachment.dataUrl,detail:'auto'});else if(attachment.type==='application/pdf'||/\.pdf$/i.test(attachment.name||'')){const base64=String(attachment.dataUrl).includes(',')?String(attachment.dataUrl).split(',')[1]:attachment.dataUrl;content.push({type:'input_file',filename:attachment.name||'documento.pdf',file_data:base64})}else content.push({type:'input_text',text:`Allegato ricevuto: ${attachment.name||'file'} (tipo non analizzabile direttamente).`});input=[{role:'user',content}]}else input=text;
+  const body={model:'gpt-5-mini',instructions:TRAVEL_CONTEXT,input,store:true,reasoning:{effort:'low'},max_output_tokens:1400};if(needsLiveWeb(message||''))body.tools=[{type:'web_search'}];if(previousResponseId)body.previous_response_id=previousResponseId;
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),55000);let response;try{response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${process.env.OPENAI_API_KEY}`},body:JSON.stringify(body),signal:controller.signal})}finally{clearTimeout(timeout)}
+  const data=await response.json();if(!response.ok){console.error('OpenAI API error',response.status,data);return res.status(response.status).json({error:data?.error?.message||'Errore OpenAI API.'})}return res.status(200).json({text:getOutputText(data)||data.output_text||'Non sono riuscito a generare una risposta.',responseId:data.id});
+ }catch(error){console.error('Travel OS chat error',error);if(error?.name==='AbortError')return res.status(504).json({error:'La risposta AI ha impiegato troppo tempo. Riprova.'});return res.status(500).json({error:'Errore del Travel OS.'})}
 }
