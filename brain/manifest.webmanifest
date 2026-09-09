@@ -1,0 +1,12 @@
+{
+  "name": "Alegladi Brain",
+  "short_name": "Brain",
+  "description": "Il sistema operativo personale di Alessandro.",
+  "start_url": "/brain/",
+  "scope": "/brain/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "orientation": "any",
+  "icons": []
+}
