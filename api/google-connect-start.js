@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { isAuthenticated } from '../lib/brain-auth.js';
+import { requireSession } from '../lib/brain-session.js';
 
 const ACCOUNTS=new Set(['personal','arredo_service']);
 const SCOPES=[
@@ -15,7 +15,7 @@ function cookie(name,value,maxAge=600){return `${name}=${encodeURIComponent(valu
 export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');
   if(req.method!=='GET') return res.status(405).end();
-  if(!isAuthenticated(req)) return res.status(401).json({error:'UNAUTHORIZED'});
+  if(!await requireSession(req,res)) return;
   const account=String(req.query?.account||'');
   if(!ACCOUNTS.has(account)) return res.status(400).json({error:'INVALID_ACCOUNT'});
   const clientId=process.env.GOOGLE_CLIENT_ID;
