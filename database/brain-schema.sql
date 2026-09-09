@@ -77,3 +77,40 @@ CREATE TABLE IF NOT EXISTS brain_activity (
 );
 
 CREATE INDEX IF NOT EXISTS brain_activity_area_time_idx ON brain_activity(area, occurred_at DESC);
+
+-- Revocable, device-aware sessions. Only a SHA-256 token hash is stored.
+CREATE TABLE IF NOT EXISTS brain_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_hash text NOT NULL UNIQUE,
+  auth_method text NOT NULL DEFAULT 'google',
+  user_email text,
+  device_label text,
+  user_agent text,
+  ip_hash text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  revoked_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS brain_sessions_active_idx ON brain_sessions(expires_at) WHERE revoked_at IS NULL;
+
+-- OAuth credentials are encrypted application-side with BRAIN_TOKEN_ENCRYPTION_KEY.
+-- Never store plaintext access/refresh tokens in this table.
+CREATE TABLE IF NOT EXISTS brain_integrations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider text NOT NULL,
+  account_key text NOT NULL,
+  account_email text,
+  scopes text[] NOT NULL DEFAULT '{}',
+  encrypted_refresh_token text,
+  encrypted_access_token text,
+  access_token_expires_at timestamptz,
+  status text NOT NULL DEFAULT 'connected',
+  last_error text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(provider, account_key)
+);
+
+CREATE INDEX IF NOT EXISTS brain_integrations_provider_idx ON brain_integrations(provider, status);
