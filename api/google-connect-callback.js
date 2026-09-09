@@ -1,6 +1,6 @@
 import { getDb } from '../lib/brain-db.js';
 import { encryptSecret } from '../lib/token-vault.js';
-import { isAuthenticated } from '../lib/brain-auth.js';
+import { requireSession } from '../lib/brain-session.js';
 
 function cookies(req){
   const raw=req.headers?.cookie||'';
@@ -16,7 +16,7 @@ function expectedEmail(account){
 export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');
   if(req.method!=='GET') return res.status(405).end();
-  if(!isAuthenticated(req)) return res.status(401).send('Sessione Brain non valida.');
+  if(!await requireSession(req,res)) return;
   const c=cookies(req);
   const account=c.brain_google_account;
   const {code,state}=req.query||{};
