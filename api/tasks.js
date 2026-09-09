@@ -1,11 +1,13 @@
 import { requireSession } from '../lib/brain-session.js';
 import { getDb } from '../lib/brain-db.js';
+import { requireSameOrigin, securityResponseHeaders } from '../lib/brain-security.js';
 
 const ALLOWED_AREAS = ['VITA PRIVATA','DA NIALTRI','ARREDO SERVICE','ALEGLADI'];
 
 export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 'no-store');
+  securityResponseHeaders(res);
   if (!await requireSession(req, res)) return;
+  if (!requireSameOrigin(req,res)) return;
   try {
     const sql = getDb();
     if (req.method === 'GET') {
@@ -22,7 +24,7 @@ export default async function handler(req, res) {
       if (!title || !ALLOWED_AREAS.includes(area)) return res.status(400).json({ error: 'INVALID_TASK' });
       const rows = await sql`
         INSERT INTO brain_tasks (title,area,project,priority,due_at,owner,notes)
-        VALUES (${title},${area},${project},${priority},${dueAt},${owner},${notes})
+        VALUES (${String(title).slice(0,500)},${area},${project},${priority},${dueAt},${owner},${notes})
         RETURNING *`;
       return res.status(201).json({ task: rows[0] });
     }
@@ -43,8 +45,8 @@ export default async function handler(req, res) {
     }
     return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
   } catch (error) {
-    console.error('brain tasks api', error);
+    console.error('brain tasks api', error?.message || error);
     const status = error.message === 'DATABASE_NOT_CONFIGURED' ? 503 : 500;
-    return res.status(status).json({ error: error.message });
+    return res.status(status).json({ error: status === 503 ? 'DATABASE_NOT_CONFIGURED' : 'TASKS_UNAVAILABLE' });
   }
 }
