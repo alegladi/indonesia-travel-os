@@ -78,6 +78,22 @@ CREATE TABLE IF NOT EXISTS brain_activity (
 
 CREATE INDEX IF NOT EXISTS brain_activity_area_time_idx ON brain_activity(area, occurred_at DESC);
 
+CREATE TABLE IF NOT EXISTS brain_inbox (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind text NOT NULL DEFAULT 'note',
+  title text NOT NULL,
+  body text,
+  suggested_area text,
+  source text NOT NULL DEFAULT 'chatgpt',
+  source_id text,
+  status text NOT NULL DEFAULT 'new' CHECK (status IN ('new','processed','discarded')),
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  processed_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS brain_inbox_status_idx ON brain_inbox(status, created_at DESC);
+
 -- Revocable, device-aware sessions. Only a SHA-256 token hash is stored.
 CREATE TABLE IF NOT EXISTS brain_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
