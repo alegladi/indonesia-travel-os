@@ -1,4 +1,6 @@
 import { neon } from '@neondatabase/serverless';
+import { requireSession } from '../lib/brain-session.js';
+import { requireSameOrigin, securityResponseHeaders } from '../lib/brain-security.js';
 
 function getUrl() {
   return process.env.STORAGE_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
@@ -17,6 +19,9 @@ async function db() {
 }
 
 export default async function handler(req, res) {
+  securityResponseHeaders(res);
+  if (!await requireSession(req,res)) return;
+  if (!requireSameOrigin(req,res)) return;
   try {
     const sql = await db();
     const id = 'indonesia-2026-alessandro-selena';
@@ -26,16 +31,16 @@ export default async function handler(req, res) {
     }
     if (req.method === 'POST') {
       const state = req.body?.state;
-      if (!state || typeof state !== 'object') return res.status(400).json({ error: 'Stato mancante.' });
+      if (!state || typeof state !== 'object') return res.status(400).json({ error: 'INVALID_STATE' });
       await sql`INSERT INTO travel_state (id, state, updated_at)
         VALUES (${id}, ${JSON.stringify(state)}::jsonb, now())
         ON CONFLICT (id) DO UPDATE SET state=EXCLUDED.state, updated_at=now()`;
       return res.status(200).json({ ok: true });
     }
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
   } catch (e) {
-    console.error('state api error', e);
-    if (e?.message === 'DATABASE_NOT_CONFIGURED') return res.status(503).json({ error: 'Database non collegato.' });
-    return res.status(500).json({ error: 'Errore memoria condivisa.' });
+    console.error('state api error', e?.message || e);
+    if (e?.message === 'DATABASE_NOT_CONFIGURED') return res.status(503).json({ error: 'DATABASE_NOT_CONFIGURED' });
+    return res.status(500).json({ error: 'STATE_UNAVAILABLE' });
   }
 }
