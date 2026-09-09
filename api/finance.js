@@ -1,9 +1,9 @@
-import { requireAuth } from '../lib/brain-auth.js';
+import { requireSession } from '../lib/brain-session.js';
 import { getDb } from '../lib/brain-db.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  if (!requireAuth(req, res)) return;
+  if (!await requireSession(req, res)) return;
   try {
     const sql = getDb();
     if (req.method === 'GET') {
