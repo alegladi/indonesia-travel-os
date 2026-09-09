@@ -1,4 +1,4 @@
-import { createSessionCookie } from '../lib/brain-auth.js';
+import { createDeviceSession } from '../lib/brain-session.js';
 
 function cookies(req){
   const raw=req.headers?.cookie||'';
@@ -23,7 +23,14 @@ export default async function handler(req,res){
   const userRes=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{headers:{authorization:`Bearer ${token.access_token}`}});
   if(!userRes.ok) return res.status(401).send('Impossibile verificare l’account Google.');
   const user=await userRes.json();
-  if(!user.email_verified||String(user.email||'').toLowerCase()!==allowed) return res.status(403).send('Account non autorizzato.');
-  res.setHeader('Set-Cookie',[createSessionCookie(),clear('brain_oauth_state'),clear('brain_oauth_verifier')]);
-  return res.redirect(302,'/brain/');
+  const email=String(user.email||'').toLowerCase();
+  if(!user.email_verified||email!==allowed) return res.status(403).send('Account non autorizzato.');
+  try{
+    const sessionCookie=await createDeviceSession(req,{authMethod:'google',userEmail:email});
+    res.setHeader('Set-Cookie',[sessionCookie,clear('brain_oauth_state'),clear('brain_oauth_verifier')]);
+    return res.redirect(302,'/brain/');
+  }catch(error){
+    console.error('google session create',error);
+    return res.status(503).send('Database Brain non disponibile.');
+  }
 }
