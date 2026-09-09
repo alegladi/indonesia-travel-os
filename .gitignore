@@ -1,0 +1,30 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.mobileprovision
+
+# Vercel / local tooling
+.vercel
+.DS_Store
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local dumps / exports / backups
+*.sql.gz
+*.dump
+*.backup
+*.sqlite
+*.sqlite3
+*.log
+private/
+secrets/
