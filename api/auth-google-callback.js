@@ -34,7 +34,7 @@ export default async function handler(req,res){
     const sessionCookie=await createDeviceSession(req,{authMethod:'password+google',userEmail:email});
     await recordAuthEvent(req,'login_success','Password and Google MFA login succeeded','info');
     res.setHeader('Set-Cookie',[sessionCookie,clearPreauthCookie(),clear('__Host-brain_oauth_state'),clear('__Host-brain_oauth_verifier')]);
-    return res.redirect(302,'/brain/');
+    return res.redirect(302,'/brain/index.html');
   }catch(error){
     console.error('google MFA callback',error);
     return res.status(503).send('Autenticazione temporaneamente non disponibile.');
