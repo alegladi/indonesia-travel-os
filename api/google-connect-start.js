@@ -1,19 +1,14 @@
 import crypto from 'node:crypto';
 import { requireSession } from '../lib/brain-session.js';
+import { securityResponseHeaders } from '../lib/brain-security.js';
 
 const ACCOUNTS=new Set(['personal','arredo_service']);
-const SCOPES=[
-  'openid','email','profile',
-  'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/drive.readonly'
-];
-
+const SCOPES=['openid','email','profile','https://www.googleapis.com/auth/gmail.readonly','https://www.googleapis.com/auth/calendar.readonly','https://www.googleapis.com/auth/drive.readonly'];
 function b64url(buf){return Buffer.from(buf).toString('base64url')}
 function cookie(name,value,maxAge=600){return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`}
 
 export default async function handler(req,res){
-  res.setHeader('Cache-Control','no-store');
+  securityResponseHeaders(res);
   if(req.method!=='GET') return res.status(405).end();
   if(!await requireSession(req,res)) return;
   const account=String(req.query?.account||'');
@@ -25,9 +20,9 @@ export default async function handler(req,res){
   const challenge=b64url(crypto.createHash('sha256').update(verifier).digest());
   const state=b64url(crypto.randomBytes(24));
   res.setHeader('Set-Cookie',[
-    cookie('brain_google_verifier',verifier),
-    cookie('brain_google_state',state),
-    cookie('brain_google_account',account)
+    cookie('__Host-brain_google_verifier',verifier),
+    cookie('__Host-brain_google_state',state),
+    cookie('__Host-brain_google_account',account)
   ]);
   const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');
   u.searchParams.set('client_id',clientId);
