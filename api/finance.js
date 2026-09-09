@@ -1,9 +1,11 @@
 import { requireSession } from '../lib/brain-session.js';
 import { getDb } from '../lib/brain-db.js';
+import { requireSameOrigin, securityResponseHeaders } from '../lib/brain-security.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 'no-store');
+  securityResponseHeaders(res);
   if (!await requireSession(req, res)) return;
+  if (!requireSameOrigin(req,res)) return;
   try {
     const sql = getDb();
     if (req.method === 'GET') {
@@ -24,7 +26,7 @@ export default async function handler(req, res) {
         INSERT INTO brain_finance_entries
         (label,amount_cents,currency,direction,due_at,paid_at,recurring,recurrence_rule,source_type,source_id,confidence,notes)
         VALUES (
-          ${body.label},${body.amountCents ?? null},${body.currency || 'EUR'},${body.direction},
+          ${String(body.label).slice(0,500)},${body.amountCents ?? null},${body.currency || 'EUR'},${body.direction},
           ${body.dueAt || null},${body.paidAt || null},${Boolean(body.recurring)},${body.recurrenceRule || null},
           ${body.sourceType || null},${body.sourceId || null},${body.confidence || 'verified'},${body.notes || null}
         ) RETURNING *`;
@@ -32,8 +34,8 @@ export default async function handler(req, res) {
     }
     return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
   } catch (error) {
-    console.error('brain finance api', error);
+    console.error('brain finance api', error?.message || error);
     const status = error.message === 'DATABASE_NOT_CONFIGURED' ? 503 : 500;
-    return res.status(status).json({ error: error.message });
+    return res.status(status).json({ error: status === 503 ? 'DATABASE_NOT_CONFIGURED' : 'FINANCE_UNAVAILABLE' });
   }
 }
