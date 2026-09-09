@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
+import { verifyPreauth, securityResponseHeaders } from '../lib/brain-security.js';
 
 function b64url(buf){return Buffer.from(buf).toString('base64url')}
 function cookie(name,value,maxAge=600){return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`}
 
 export default async function handler(req,res){
-  res.setHeader('Cache-Control','no-store, max-age=0');
+  securityResponseHeaders(res);
   if(req.method!=='GET') return res.status(405).end();
+  if(!verifyPreauth(req)) return res.status(401).json({error:'PASSWORD_STEP_REQUIRED'});
   const clientId=process.env.GOOGLE_CLIENT_ID;
   const base=(process.env.BRAIN_BASE_URL||'').replace(/\/$/,'');
   if(!clientId||!base) return res.status(503).json({error:'GOOGLE_AUTH_NOT_CONFIGURED'});
