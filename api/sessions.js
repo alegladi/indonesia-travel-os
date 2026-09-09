@@ -1,10 +1,12 @@
 import { getDb } from '../lib/brain-db.js';
 import { requireSession, revokeSessionById } from '../lib/brain-session.js';
+import { requireSameOrigin, securityResponseHeaders } from '../lib/brain-security.js';
 
 export default async function handler(req,res){
-  res.setHeader('Cache-Control','no-store');
+  securityResponseHeaders(res);
   const session=await requireSession(req,res);
   if(!session) return;
+  if(!requireSameOrigin(req,res)) return;
   try{
     const sql=getDb();
     if(req.method==='GET'){
@@ -23,7 +25,7 @@ export default async function handler(req,res){
     }
     return res.status(405).json({error:'METHOD_NOT_ALLOWED'});
   }catch(error){
-    console.error('sessions api',error);
+    console.error('sessions api',error?.message||error);
     return res.status(503).json({error:'SESSIONS_UNAVAILABLE'});
   }
 }
