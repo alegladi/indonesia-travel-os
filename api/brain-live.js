@@ -1,4 +1,6 @@
 import { requireAuth } from '../lib/brain-auth.js';
+import { getDb } from '../lib/brain-db.js';
+import { decryptSecret, encryptSecret } from '../lib/token-vault.js';
 
 const PERSONAL = 'personal';
 const ARREDO = 'arredo_service';
@@ -58,7 +60,35 @@ async function refreshAccessToken(refreshToken) {
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body
   });
-  return (await response.json()).access_token;
+  const json = await response.json();
+  return {
+    accessToken: json.access_token,
+    expiresAt: new Date(Date.now() + (Number(json.expires_in || 3600) * 1000))
+  };
+}
+
+async function integrationToken(accountKey) {
+  const sql = getDb();
+  const rows = await sql`SELECT id, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status
+    FROM brain_integrations
+    WHERE provider='google' AND account_key=${accountKey}
+    LIMIT 1`;
+  const row = rows[0];
+  if (!row || row.status !== 'connected') return null;
+
+  const expiresAt = row.access_token_expires_at ? new Date(row.access_token_expires_at).getTime() : 0;
+  if (row.encrypted_access_token && expiresAt > Date.now() + 60_000) {
+    return decryptSecret(row.encrypted_access_token);
+  }
+
+  const refreshToken = decryptSecret(row.encrypted_refresh_token);
+  if (!refreshToken) return null;
+  const refreshed = await refreshAccessToken(refreshToken);
+  if (!refreshed?.accessToken) return null;
+  await sql`UPDATE brain_integrations
+    SET encrypted_access_token=${encryptSecret(refreshed.accessToken)}, access_token_expires_at=${refreshed.expiresAt}, updated_at=now(), last_error=NULL, status='connected'
+    WHERE id=${row.id}`;
+  return refreshed.accessToken;
 }
 
 async function gmailUnread(accessToken, account) {
@@ -137,8 +167,8 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
 
   const tokenResults = await Promise.allSettled([
-    refreshAccessToken(process.env.GOOGLE_PERSONAL_REFRESH_TOKEN),
-    refreshAccessToken(process.env.GOOGLE_WORK_REFRESH_TOKEN)
+    integrationToken(PERSONAL),
+    integrationToken(ARREDO)
   ]);
   const personalToken = tokenResults[0].status === 'fulfilled' ? tokenResults[0].value : null;
   const workToken = tokenResults[1].status === 'fulfilled' ? tokenResults[1].value : null;
@@ -151,10 +181,10 @@ export default async function handler(req, res) {
   ]);
 
   const sourceHealth = {
-    gmailPersonal: { ok: personalMail.ok, latencyMs: personalMail.latencyMs, error: personalMail.error || null },
-    gmailWork: { ok: workMail.ok, latencyMs: workMail.latencyMs, error: workMail.error || null },
-    calendarPersonal: { ok: personalCalendar.ok, latencyMs: personalCalendar.latencyMs, error: personalCalendar.error || null },
-    calendarWork: { ok: workCalendar.ok, latencyMs: workCalendar.latencyMs, error: workCalendar.error || null }
+    gmailPersonal: { ok: personalMail.ok && Boolean(personalToken), latencyMs: personalMail.latencyMs, error: personalToken ? (personalMail.error || null) : 'NOT_CONNECTED' },
+    gmailWork: { ok: workMail.ok && Boolean(workToken), latencyMs: workMail.latencyMs, error: workToken ? (workMail.error || null) : 'NOT_CONNECTED' },
+    calendarPersonal: { ok: personalCalendar.ok && Boolean(personalToken), latencyMs: personalCalendar.latencyMs, error: personalToken ? (personalCalendar.error || null) : 'NOT_CONNECTED' },
+    calendarWork: { ok: workCalendar.ok && Boolean(workToken), latencyMs: workCalendar.latencyMs, error: workToken ? (workCalendar.error || null) : 'NOT_CONNECTED' }
   };
 
   const connectedSources = Object.values(sourceHealth).filter(x => x.ok).length;
